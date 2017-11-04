@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>title</title>
+  </head>
+  <script type="text/javascript">
+    let card_data = [];
+    for(let i = 0; i < 64; i++) {
+      card_data.push(new Uint8Array(16));
+    }
+
+    // https://stackoverflow.com/a/34310051
+    function toHexString(byteArray) {
+      return Array.from(byteArray, function(byte) {
+        return ('0' + (byte & 0xFF).toString(16)).slice(-2);
+      }).join('')
+    }
+
+    // takes a element representing a block as input
+    function update_block_colors(ele) {
+      let original_block = toHexString(card_data[ele.dataset.block]);
+      let current_block = ele.value;
+
+      let char_color_list = ele.parentElement.querySelectorAll(".block_color span");
+      for(let i = 0; i < char_color_list.length; i++) {
+        let char_color = char_color_list[i];
+
+        if (current_block.charAt(i) !== original_block.charAt(i)) {
+          char_color.style.backgroundColor = "yellow";
+        }
+        else {
+          char_color.style.backgroundColor = "";
+        }
+      }
+    }
+
+    function on_block_keypress(e) {
+      let input_key = e.key.toUpperCase();
+
+      if (!/[A-F0-9]/.test(input_key)) {
+        return false;
+      }
+
+      // if this new character would exceed the limit, then use insert behaviour, else just add the char
+      let cursor_pos = e.target.selectionStart;
+      let cur_value = e.target.value;
+      let new_value;
+
+      if (cur_value.length === 32 && cursor_pos !== 32) {
+        new_value = cur_value.substr(0, cursor_pos) + input_key + cur_value.substr(cursor_pos+1, cur_value.length);
+      }
+      else if (cur_value.length < 32) {
+        new_value = cur_value.substr(0, cursor_pos) + input_key + cur_value.substr(cursor_pos, cur_value.length);
+      }
+      else {
+        return false;
+      }
+
+      e.target.value = new_value;
+      e.target.setSelectionRange(cursor_pos+1, cursor_pos+1);
+
+      update_block_colors(e.target);
+
+      return false;
+    }
+
+    function autorun() {
+
+    }
+
+    if (window.addEventListener) window.addEventListener("load", autorun, false);
+    else if (window.attachEvent) window.attachEvent("onload", autorun);
+    else window.onload = autorun;
+  </script>
+  <style>
+    body {
+      font-size: 2em;
+    }
+
+    .block_container {
+      position: relative;
+    }
+
+    .block_value, .block_color {
+      font-family: Consolas, monaco, monospace;
+      font-size: 2em;
+    }
+
+    .block_value {
+      background: transparent;
+    }
+
+    .block_color {
+      position: absolute;
+      top: 0px;
+      left: 0px;
+      z-index: -1;
+    }
+  </style>
+  <body>
+    <div>
+      <div class="sector" id="sector_master">
+        <div class="sector_no_container">
+          Sector <span class="sector_no">0</span>
+        </div>
+        <div class="block_container">
+          <input data-block="0" class="block_value" type="text" onkeypress="return on_block_keypress(event)" maxlength="32" size="32" value="12345678000000000000000000000000"></input>
+          <div class="block_color">
+            <span>&nbsp;</span><span>&nbsp;</span><span>&nbsp;</span><span>&nbsp;</span><span>&nbsp;</span><span>&nbsp;</span><span>&nbsp;</span><span>&nbsp;</span><span>&nbsp;</span><span>&nbsp;</span><span>&nbsp;</span><span>&nbsp;</span><span>&nbsp;</span><span>&nbsp;</span><span>&nbsp;</span><span>&nbsp;</span><span>&nbsp;</span><span>&nbsp;</span><span>&nbsp;</span><span>&nbsp;</span><span>&nbsp;</span><span>&nbsp;</span><span>&nbsp;</span><span>&nbsp;</span><span>&nbsp;</span><span>&nbsp;</span><span>&nbsp;</span><span>&nbsp;</span><span>&nbsp;</span><span>&nbsp;</span><span>&nbsp;</span><span>&nbsp;</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

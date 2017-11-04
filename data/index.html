@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>MIFARE Value Modifier</title>
+    <style>
+      * {
+        font-size: 30px;
+      }
+
+      #connected.connected:after {
+        color: green;
+        content: "Connected";
+      }
+
+      #connected.disconnected:after {
+        color: red;
+        content: "Disonnected";
+      }
+    </style>
+    <script>
+      // https://stackoverflow.com/a/40031979
+      function buf2hex(buffer) { // buffer is an ArrayBuffer
+        return Array.prototype.map.call(new Uint8Array(buffer), x => ('00' + x.toString(16)).slice(-2)).join('');
+      }
+
+      const socket = new WebSocket("ws://192.168.4.1:81");
+      socket.binaryType = "arraybuffer";
+
+      let card_id = false;
+      let card_present_timeout, disconnect_timeout;
+
+      socket.onmessage = function(e) {
+        clearInterval(disconnect_timeout);
+        document.querySelector("#connected").className = "connected";
+        disconnect_timeout = setInterval(function() {
+          document.querySelector("#connected").className = "disconnected";
+        }, 2000);
+
+        if (typeof e.data == "object") {
+          let dv = new DataView(e.data);
+          switch (dv.getUint8(0)) {
+            case 0x1:
+              // id is stored as LE but for human readablility we use BE
+              card_id = dv.getUint32(1).toString(16);
+
+              console.log("ID", card_id);
+              document.querySelector("#card_id").innerText = "Card found: "+card_id;
+
+              clearInterval(card_present_timeout);
+              card_present_timeout = setTimeout(function() {
+                card_id = false;
+                document.querySelector("#card_id").innerText = "No card present!";
+              }, 500);
+
+              break;
+            case 0x02:
+              console.warn("Invalid key!");
+              document.querySelector("#invalid_key_msg").style.display = "block";
+              break;
+            case 0x11:
+              document.querySelector("#invalid_key_msg").style.display = "none";
+              document.querySelector("#block_val").dataset.little_endian = dv.getInt32(1, true);
+              document.querySelector("#block_val").dataset.big_endian = dv.getInt32(1);
+
+              update_block_val_display();
+              break;
+          }
+        }
+        else {
+          console.log(e.data);
+        }
+      }
+
+      function update_block_val_display() {
+        let ele = document.querySelector("#block_val");
+
+        if (document.querySelector('input[name="endianness"]:checked').value === "LE") {
+          ele.value = ele.dataset.little_endian;
+        }
+        else {
+          ele.value = ele.dataset.big_endian;
+        }
+      }
+
+      function read_value() {
+        let dv = new DataView(new ArrayBuffer(8));
+        let key = document.querySelector("#block_key").value;
+
+        dv.setUint8(0, 0x10);
+        dv.setUint8(1, document.querySelector("#block_no").value);
+        dv.setUint16(2, parseInt(key.substring(0, 4), 16));
+        dv.setUint16(4, parseInt(key.substring(4, 8), 16));
+        dv.setUint16(6, parseInt(key.substring(8, 12), 16));
+
+        console.log("tx");
+        console.log(buf2hex(dv.buffer));
+        socket.send(dv.buffer);
+        socket.send(new Uint8Array([0x11]).buffer);
+      }
+
+      function change_value() {
+        let change = document.querySelector("#change_val").value;
+        let type = document.querySelector('input[name="change"]:checked').value;
+
+        let dv = new DataView(new ArrayBuffer(5));
+
+        if (type === "inc") {
+          dv.setUint8(0, 0x12);
+        }
+        else {
+          dv.setUint8(0, 0x13);
+        }
+
+        dv.setInt32(1, change, true);
+
+        console.log("tx:", buf2hex(dv.buffer));
+        socket.send(dv.buffer);
+      }
+
+      function is_valid_hex(e) {
+        setTimeout(function() {
+          e.target.value = e.target.value.toUpperCase();
+        }, 1);
+
+        return /[A-F0-9]/.test(e.key.toUpperCase());
+      }
+
+      function handle_key_change(e) {
+        if (!is_valid_hex(e)) return false;
+
+        setTimeout(function() {
+          localStorage.setItem("key", e.target.value);
+        }, 10)
+
+        return true;
+      }
+
+      function is_valid_block(e) {
+        let initial_val = e.target.value;
+
+        setTimeout(function() {
+          let new_val = parseInt(e.target.value, 10);
+
+          if (!(new_val > 0 && new_val <= 63)) {
+            e.target.value = initial_val;
+          }
+        }, 1);
+      }
+
+      window.onload = function() {
+        document.querySelector("#block_key").value = localStorage.getItem("key") || "000000000000";
+      }
+    </script>
+  </head>
+  <body>
+    <div id="connected"></div>
+    <div id="card_id">No card present!</div>
+    <div>
+      Block: <input type="number" id="block_no" onkeypress="return is_valid_block(event)" style="width: 50px" value="0"></input>
+    </div>
+    <div>
+      Key: <input type="text" id="block_key" onkeypress="return handle_key_change(event)" maxlength="12" size="12"></input> <span style="color: red; display:none;" id="invalid_key_msg">Bad key</span>
+    </div>
+    <div>
+      <input type="button" value="Read" onclick="read_value()">
+    </div>
+    <div>
+      Value: <input id="block_val" type="number" value="" style="width: 200px" disabled> <input type="radio" name="endianness" value="LE" checked="1" onchange="update_block_val_display()">LE</input><input type="radio" name="endianness" value="BE" onchange="update_block_val_display()">BE</input>
+    </div>
+    <div>
+      Change: <input id="change_val" type="number" value="0" style="width: 200px"> <input type="radio" name="change" value="inc" checked="1">+</input><input type="radio" name="change" value="dec">-</input> <input type="button" value="Write" onclick="change_value()"></input>
+    </div>
+  </body>
+</html>
