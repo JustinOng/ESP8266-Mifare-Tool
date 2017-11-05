@@ -73,6 +73,8 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
 }
 
 void setup() {
+	pinMode(D2, OUTPUT);
+
 	Serial.begin(115200);
 	Serial.println();
 
@@ -114,6 +116,7 @@ void handle_rfid() {
   //mfrc522.PCD_StopCrypto1();
 
 	if (mfrc522.PICC_IsNewCardPresent() && mfrc522.PICC_ReadCardSerial()) {
+		digitalWrite(D2, !digitalRead(D2));
 		buf[0] = 0x01;
 		memcpy(&buf[1], mfrc522.uid.uidByte, 4);
 		webSocket.broadcastBIN(buf, 5);
@@ -153,7 +156,7 @@ void handle_rfid() {
 			Serial.print(block);
 			Serial.print(" by ");
 			Serial.println(change);
-			
+
 			status = mfrc522.MIFARE_Increment(block, change);
 			if (status != MFRC522::STATUS_OK) {
         Serial.print(F("MIFARE_Increment() failed: "));
@@ -202,11 +205,27 @@ void handle_rfid() {
 
 void loop() {
 	static uint32_t last_ping = 0;
+	static uint32_t last_blink = 0;
 	handle_rfid();
 
 	if ((millis() - last_ping) > 500) {
 		webSocket.broadcastTXT("Alive!");
 		last_ping = millis();
+	}
+
+	if (WiFi.softAPgetStationNum() == 0) {
+		if ((millis() - last_blink) > 2000) {
+			digitalWrite(D2, !digitalRead(D2));
+
+			last_blink = millis();
+		}
+	}
+	else {
+		if ((millis() - last_blink) > 500) {
+			digitalWrite(D2, !digitalRead(D2));
+
+			last_blink = millis();
+		}
 	}
 
   webSocket.loop();
